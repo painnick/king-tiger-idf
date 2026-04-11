@@ -15,7 +15,7 @@
 #define MOUNT_BIN2_PIN  18
 
 // Servo
-#define CANNON_SERVO_PIN 23
+#define CANNON_SERVO_PIN 32
 
 // LEDs
 #define MG_LED_PIN        16
@@ -24,5 +24,5 @@
 #define BACKLIGHT_LED_PIN 4
 
 // Sound (JQ6500)
-#define SOUND_TX_PIN 32
+#define SOUND_TX_PIN 23
 #define SOUND_UART_PORT UART_NUM_1

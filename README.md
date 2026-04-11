@@ -32,7 +32,8 @@ Bluepad32를 이용한 게임패드 조작 RC 탱크입니다.
 | GPIO 18 | 포 마운트 IN2 | DRV8833 #2 포 마운트 DC (BIN2) |
 | GPIO 22 | 터렛 모터 IN1 | DRV8833 #2 터렛 (AIN1) |
 | GPIO 21 | 터렛 모터 IN2 | DRV8833 #2 터렛 (AIN2) |
-| GPIO 32 | JQ6500 RX | JQ6500 UART 통신 (ESP32 TX) |
+| GPIO 23 | JQ6500 RX | JQ6500 UART 통신 (ESP32 TX) |
+| GPIO 32 | 포신 서보 모터 | 포신 당기기 제어 (B 버튼) |
 
 (본 프로젝트에서는 온칩 JTAG 디버깅을 사용하지 않으므로 GPIO 12~15번은 일반 용도로 활용 가능합니다.)
 
@@ -99,7 +100,7 @@ Bluepad32를 이용한 게임패드 조작 RC 탱크입니다.
 
 ### JQ6500 모듈 연결
 
-- 모듈 **RX** → GPIO 32 (ESP32 UART TX)
+- 모듈 **RX** → GPIO 23 (ESP32 UART TX)
 - 모듈 **TX** → (미연결)
 - **VCC** → 5V (보드 매뉴얼 기준, 일부 보드는 3.3V만 허용할 수 있음)
 - **GND** → 공통 접지
