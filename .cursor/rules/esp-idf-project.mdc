@@ -1,0 +1,39 @@
+---
+description: ESP-IDF 5.4 프로젝트 구조, 코딩 규칙, 하드웨어 제어 및 주의사항
+alwaysApply: true
+---
+
+# ESP32-IDF 프로젝트 가이드
+
+## 기술 스택
+
+- **프레임워크:** ESP-IDF v5.4.4 (다른 IDF 버전은 가정하지 않음)
+- **언어:** C (C99/C11 지향)
+- **빌드:** CMake / `idf.py`
+- **명령 실행 표준:** `idf.py` 등 모든 ESP-IDF 도구 실행 시 반드시 **`cmd.exe`**를 사용하며, 실행 전 프로젝트 루트의 **`env.bat`**를 먼저 호출해야 함 (예: `cmd /c "env.bat && idf.py build"`). PowerShell이나 기타 셸은 환경 변수 유실 가능성으로 인해 사용하지 않음.
+- **타깃:** ESP32(기본)
+
+## 디렉터리
+
+- `main/`: 메인 로직, `app_main.c`
+- `components/`: 재사용 사용자 컴포넌트
+- `managed_components/`: IDF Component Manager 의존성
+- `sdkconfig`: IDF 구성 (직접 편집 금지, 변경은 `menuconfig` 경로로 안내)
+
+## 코딩 규칙
+
+1. **이름:** 함수·변수 `snake_case`, 컴포넌트 API는 접두사(예: `wifi_init_sta()`), 상수·매크로 `UPPER_SNAKE_CASE`
+2. **오류 처리:** ESP-IDF API의 `esp_err_t`를 확인하고 `ESP_ERROR_CHECK()` 또는 적절한 로그 처리
+3. **로그:** `printf` 대신 `ESP_LOGI` / `ESP_LOGE` / `ESP_LOGW` (태그는 파일 상단)
+4. **FreeRTOS:** 태스크 생성 시 스택·우선순위를 명시. 공유 자원은 `Mutex` 또는 `Semaphore`로 보호
+
+## 참조 패턴
+
+- **NVS:** `components/storage/nvs_helper.c` 패턴 준수
+- **메모리:** 정적 할당보다 `pvPortMalloc` 또는 `heap_caps_malloc` 선호
+
+## 하드웨어 제어
+
+- **DC 모터:** 트랙·터렛·포 마운트 등 정밀 제어 시 **`MCPWM`** 사용 (`LEDC`가 아님)
+- **서보:** **`LEDC`**로 제어 (본 프로젝트 README 기준 포신 서보만 해당)
+- **핀 맵·기능 상세:** 프로젝트 루트 **`README.md`**를 최우선 참조
