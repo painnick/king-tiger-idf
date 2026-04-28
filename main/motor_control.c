@@ -59,7 +59,7 @@ void motor_init(void) {
     init_mcpwm_group(0, TRACK_AIN1_PIN, TRACK_AIN2_PIN, track_l_cmpr);
     init_mcpwm_group(0, TRACK_BIN1_PIN, TRACK_BIN2_PIN, track_r_cmpr);
     init_mcpwm_group(1, TURRET_AIN1_PIN, TURRET_AIN2_PIN, turret_cmpr);
-    init_mcpwm_group(1, MOUNT_BIN1_PIN, MOUNT_BIN2_PIN, mount_cmpr);
+    init_mcpwm_group(1, PORT_BIN1_PIN, PORT_BIN2_PIN, mount_cmpr);
     ESP_LOGI(TAG, "MCPWM motors initialized");
 }
 
