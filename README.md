@@ -28,7 +28,7 @@ Bluepad32를 이용한 게임패드 조작 RC 탱크입니다. ESP32-IDF(v5.4.4)
 | **GPIO 19** | 포 마운트 IN1 | DRV8833 #2 - 포 마운트 상하 |
 | **GPIO 21** | 터렛 IN2 | DRV8833 #2 - 터렛 회전 |
 | **GPIO 22** | 터렛 IN1 | DRV8833 #2 - 터렛 회전 |
-| **GPIO 23** | 사운드 TX | JQ6900 UART TX |
+| **GPIO 23** | 사운드 TX | DFPlayer Mini UART TX |
 | **GPIO 25** | 우측 트랙 IN2 | DRV8833 #1 - 우측 트랙 |
 | **GPIO 26** | 좌측 트랙 IN2 | DRV8833 #1 - 좌측 트랙 |
 | **GPIO 27** | 좌측 트랙 IN1 | DRV8833 #1 - 좌측 트랙 |
@@ -48,7 +48,7 @@ Bluepad32를 이용한 게임패드 조작 RC 탱크입니다. ESP32-IDF(v5.4.4)
 ### 서보 모터
 - **GPIO 32**: 포신 반동 서보 (B 버튼 시 90도 -> 180도 -> 90도 동작)
 
-### 사운드 모듈 (JQ6900/JQ6500)
+### 사운드 모듈 (DFPlayer Mini)
 - **TX (GPIO 23)**: 모듈의 RX 핀에 연결하여 UART 제어 (9600bps)
 
 ---
@@ -75,7 +75,7 @@ Bluepad32를 이용한 게임패드 조작 RC 탱크입니다. ESP32-IDF(v5.4.4)
 - `rctank_motor`: MCPWM을 이용한 트랙 제어 및 GPIO를 이용한 액세서리(터렛/포 마운트) 제어
 - `rctank_servo`: LEDC를 이용한 포신 서보 제어
 - `rctank_led`: 각종 LED 상태 제어
-- `rctank_dfplayer`: JQ6900/JQ6500 UART 통신 및 효과음 재생
+- `rctank_dfplayer`: DFPlayer Mini 제어 및 효과음 재생
 - `rctank_storage`: NVS를 이용한 볼륨 및 설정값 저장
 
 ### 플랫폼 로직 (`main/my_flatform.c`)
