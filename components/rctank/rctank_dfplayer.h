@@ -21,6 +21,9 @@ esp_err_t rctank_dfplayer_init(void);
 /** 트랙 재생 (1회) */
 esp_err_t rctank_dfplayer_play(uint8_t track);
 
+/** 트랙 반복 재생 */
+esp_err_t rctank_dfplayer_play_loop(uint8_t track);
+
 /** 볼륨 설정 (0~30) */
 esp_err_t rctank_dfplayer_set_volume(uint8_t vol);
 

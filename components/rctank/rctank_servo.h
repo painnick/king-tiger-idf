@@ -12,7 +12,7 @@ extern "C" {
 #endif
 
 /** 포신 서보 기본 각도 (당기기 전) */
-#define RCTANK_SERVO_GUN_DEG_REST 90
+#define RCTANK_SERVO_GUN_DEG_REST 0
 
 esp_err_t rctank_servo_init(void);
 

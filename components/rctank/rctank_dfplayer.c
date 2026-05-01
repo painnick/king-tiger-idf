@@ -147,10 +147,8 @@ static void dfplayer_task(void *arg)
                                if (s->command_value == 0x3D) {
                                    uint16_t track = ((uint16_t)s->param_msb << 8) | s->param_lsb;
                                    // ESP_LOGI(TAG, "Track %d Finished", track);
-                                   if (track == RCTANK_DFPLAYER_TRACK_IDLE) {
-                                       /* 1번 트랙(IDLE) 종료 시 다시 재생 */
-                                       rctank_dfplayer_play(RCTANK_DFPLAYER_TRACK_IDLE);
-                                   }
+                                   /* 어떤 트랙이든 재생이 끝나면 IDLE 트랙을 반복 재생으로 다시 시작 */
+                                   rctank_dfplayer_play_loop(RCTANK_DFPLAYER_TRACK_IDLE);
                                }
                            } else {
                                ESP_LOGW(TAG, "Checksum fail");
@@ -194,6 +192,14 @@ esp_err_t rctank_dfplayer_play(uint8_t track)
     if (track < 1) return ESP_ERR_INVALID_ARG;
     /* PLAY(0x03): param = track number (MSB, LSB). 0001.mp3 ~ 9999 등 */
     return dfplayer_send_cmd(DFPLAYER_CMD_PLAY, (uint8_t)((uint16_t)track >> 8), (uint8_t)(track & 0xFF));
+}
+
+esp_err_t rctank_dfplayer_play_loop(uint8_t track)
+{
+    if (track < 1) return ESP_ERR_INVALID_ARG;
+    /* 0x08: Playback Mode (Single Track Loop) 
+       대부분의 DFPlayer 모듈에서 이 명령만으로 해당 트랙의 무한 반복 재생이 시작됩니다. */
+    return dfplayer_send_cmd(0x08, (uint8_t)((uint16_t)track >> 8), (uint8_t)(track & 0xFF));
 }
 
 esp_err_t rctank_dfplayer_set_volume(uint8_t vol)

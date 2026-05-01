@@ -23,7 +23,9 @@
 #define AXIS_DEADZONE 60
 #define DEBOUNCE_MS 100
 #define HEADLIGHT_DEBOUNCE_MS 400 /* 헤드라이트 토글 최소 간격 (둔감) */
-#define GUN_FIRE_MS 300           /* 포신 LED/서보 유지 시간 */
+#define GUN_PULL_MS 100           /* 1단계: 포신 당기기 지연 시간 */
+#define GUN_TRACK_MS 200          /* 2단계: 트랙 반동 시간 */
+#define GUN_RETURN_WAIT_MS 200    /* 3단계: 트랙 정지 후 포신 복구 대기 시간 */
 #define GUN_DELAY_MS 400          /* 포신: MP3 재생 요청 후 서보/LED/럼블 지연 (DFPlayer 지연 보정) */
 #define MG_FIRE_MS 500            /* 기관총 발사 시간 (LED 깜빡임) */
 #define MG_LED_BLINK_MS 75        /* 기관총 LED 깜빡임 주기 */
@@ -55,7 +57,15 @@ static esp_timer_handle_t mg_delayed_start_timer = NULL;
 static uni_hid_device_t* mg_delayed_device = NULL; /* 500ms 후 럼블용 */
 static int mg_led_toggle = 0;
 
+static esp_timer_handle_t gun_track_timer = NULL;
+static esp_timer_handle_t gun_return_timer = NULL;
 static esp_timer_handle_t gun_detach_timer = NULL;
+static esp_timer_handle_t waiting_idle_timer = NULL; /* 연결 대기 중 30초 주기 알림용 */
+
+static void waiting_idle_cb(void* arg) {
+    (void)arg;
+    rctank_dfplayer_play(RCTANK_DFPLAYER_TRACK_IDLE);
+}
 
 static void gun_detach_timer_cb(void* arg) {
     (void)arg;
@@ -63,10 +73,8 @@ static void gun_detach_timer_cb(void* arg) {
     rctank_servo_gun_enable(false);
 }
 
-static void gun_fire_timer_cb(void* arg) {
+static void gun_return_timer_cb(void* arg) {
     (void)arg;
-    rctank_motor_left_track_set(0);
-    rctank_motor_right_track_set(0);
     rctank_led_gun_set(0);
     rctank_servo_gun_set_degree(RCTANK_SERVO_GUN_DEG_REST);
 
@@ -75,24 +83,46 @@ static void gun_fire_timer_cb(void* arg) {
     esp_timer_start_once(gun_detach_timer, 500 * 1000);
 }
 
-/* 포신: MP3 재생 요청 후 500ms 지난 뒤 서보/LED/럼블 시작 (DFPlayer 지연 보정) */
-static void gun_delayed_start_cb(void* arg) {
+static void gun_fire_timer_cb(void* arg) {
     (void)arg;
+    /* 2단계 종료: 트랙 정지 */
+    rctank_motor_left_track_set(0);
+    rctank_motor_right_track_set(0);
 
-    /* 반동 시작 */
-    int64_t now_ms = esp_timer_get_time() / 1000;
-    recoil_end_time = now_ms + GUN_FIRE_MS;
+    /* 3단계 시작: 포신 복구 지연 */
+    esp_timer_start_once(gun_return_timer, GUN_RETURN_WAIT_MS * 1000);
+}
+
+static void gun_track_timer_cb(void* arg) {
+    (void)arg;
+    /* 2단계 시작: 트랙 밀기 */
     rctank_motor_left_track_set(-RECOIL_POWER);
     rctank_motor_right_track_set(-RECOIL_POWER);
 
+    /* 트랙 정지 예약 */
+    esp_timer_start_once(gun_timer, GUN_TRACK_MS * 1000);
+}
+
+/* 포신: MP3 재생 요청 후 GUN_DELAY_MS 지난 뒤 서보/LED/럼블 시작 (DFPlayer 지연 보정) */
+static void gun_delayed_start_cb(void* arg) {
+    (void)arg;
+
+    /* 1단계 시작: 포신 당기기 */
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    /* 리코일 제어권 잠금: 포신 당기기 + 트랙 밀기 시간 동안 */
+    recoil_end_time = now_ms + GUN_PULL_MS + GUN_TRACK_MS;
+
+    rctank_led_gun_set(1);
+    rctank_servo_gun_set_degree(60);
+
     uni_hid_device_t* d = gun_delayed_device;
     gun_delayed_device = NULL;
-    rctank_led_gun_set(1);
-    rctank_servo_gun_set_degree(180);
     if (d != NULL && d->report_parser.play_dual_rumble != NULL)
         d->report_parser.play_dual_rumble(d, 0, 400, 150, 255);
-    esp_timer_stop(gun_timer);
-    esp_timer_start_once(gun_timer, GUN_FIRE_MS * 1000);
+
+    /* 2단계(트랙 밀기) 지연 시작 */
+    esp_timer_stop(gun_track_timer);
+    esp_timer_start_once(gun_track_timer, GUN_PULL_MS * 1000);
 }
 
 static void delayed_restart_cb(void* arg) {
@@ -154,6 +184,22 @@ static void my_platform_init(int argc, const char** argv) {
     };
     esp_timer_create(&gun_detach_timer_args, &gun_detach_timer);
 
+    const esp_timer_create_args_t gun_track_timer_args = {
+        .callback = &gun_track_timer_cb,
+        .arg = NULL,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "gun_track",
+    };
+    esp_timer_create(&gun_track_timer_args, &gun_track_timer);
+
+    const esp_timer_create_args_t gun_return_timer_args = {
+        .callback = &gun_return_timer_cb,
+        .arg = NULL,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "gun_return",
+    };
+    esp_timer_create(&gun_return_timer_args, &gun_return_timer);
+
     const esp_timer_create_args_t gun_delayed_start_args = {
         .callback = &gun_delayed_start_cb,
         .arg = NULL,
@@ -193,6 +239,14 @@ static void my_platform_init(int argc, const char** argv) {
         .name = "mg_delayed",
     };
     esp_timer_create(&mg_delayed_start_args, &mg_delayed_start_timer);
+
+    const esp_timer_create_args_t waiting_idle_args = {
+        .callback = &waiting_idle_cb,
+        .arg = NULL,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "waiting_idle",
+    };
+    esp_timer_create(&waiting_idle_args, &waiting_idle_timer);
 }
 
 static void my_platform_on_init_complete(void) {
@@ -209,7 +263,9 @@ static void my_platform_on_init_complete(void) {
     rctank_dfplayer_set_volume(vol);
     vTaskDelay(pdMS_TO_TICKS(200));
 
+    /* 초기 1회 재생 후 30초 주기 타이머 시작 */
     rctank_dfplayer_play(RCTANK_DFPLAYER_TRACK_IDLE);
+    esp_timer_start_periodic(waiting_idle_timer, 30 * 1000 * 1000);
 }
 
 static uni_error_t my_platform_on_device_discovered(bd_addr_t addr, const char* name, uint16_t cod, uint8_t rssi) {
@@ -232,7 +288,9 @@ static void my_platform_on_device_disconnected(uni_hid_device_t* d) {
     rctank_motor_left_track_set(0);
     rctank_motor_right_track_set(0);
     rctank_motor_turret_set(0);
+    /* 연결 해제 시 다시 30초 주기 재생 시작 */
     rctank_dfplayer_play(RCTANK_DFPLAYER_TRACK_IDLE);
+    esp_timer_start_periodic(waiting_idle_timer, 30 * 1000 * 1000);
 }
 
 static uni_error_t my_platform_on_device_ready(uni_hid_device_t* d) {
@@ -240,7 +298,12 @@ static uni_error_t my_platform_on_device_ready(uni_hid_device_t* d) {
     my_platform_instance_t* ins = get_my_platform_instance(d);
     ins->gamepad_seat = GAMEPAD_SEAT_A;
 
+    esp_timer_stop(waiting_idle_timer); /* 연결 시 주기적 소리 중지 */
+    rctank_dfplayer_stop();
+    vTaskDelay(pdMS_TO_TICKS(100));
     rctank_dfplayer_play(RCTANK_DFPLAYER_TRACK_CONNECT);
+    /* 더 이상 IDLE로 복구하지 않음 (운용 중 정적 유지) */
+
     trigger_event_on_gamepad(d);
     if (d->report_parser.play_dual_rumble != NULL)
         d->report_parser.play_dual_rumble(d, 0, 400, 128, 200);
