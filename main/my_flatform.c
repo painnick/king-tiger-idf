@@ -347,14 +347,36 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
         turret = 511;
     rctank_motor_turret_set(turret);
 
-    /* 포 마운트: D-PAD 상하 (DRV8833) */
-    int32_t port = 0;
-    if (gp->dpad & DPAD_UP)
-        port = 511;
-    if (gp->dpad & DPAD_DOWN)
-        port = -511;
+    /* 포 마운트: D-PAD 상하 (서보 SG90, GPIO 13, 범위 0~60도) */
+    static float s_elevation_deg = RCTANK_SERVO_ELEVATION_DEG_REST;
+    static int64_t s_last_elevation_time_ms = 0;
 
-    rctank_motor_port_set(port);
+    if (s_last_elevation_time_ms == 0) {
+        s_last_elevation_time_ms = now_ms;
+    }
+    int64_t dt_ms = now_ms - s_last_elevation_time_ms;
+    s_last_elevation_time_ms = now_ms;
+
+    if (dt_ms < 0 || dt_ms > 200) {
+        dt_ms = 20; // 비정상적인 시간 간격 보정
+    }
+
+    float elevation_change = 0;
+    if (gp->dpad & DPAD_UP) {
+        elevation_change = (10.0f / 1000.0f) * dt_ms; // 초당 10도 증가
+    } else if (gp->dpad & DPAD_DOWN) {
+        elevation_change = -(10.0f / 1000.0f) * dt_ms; // 초당 10도 감소
+    }
+
+    if (elevation_change != 0) {
+        s_elevation_deg += elevation_change;
+        if (s_elevation_deg < RCTANK_SERVO_ELEVATION_MIN)
+            s_elevation_deg = RCTANK_SERVO_ELEVATION_MIN;
+        if (s_elevation_deg > RCTANK_SERVO_ELEVATION_MAX)
+            s_elevation_deg = RCTANK_SERVO_ELEVATION_MAX;
+
+        rctank_servo_elevation_set_degree((int)s_elevation_deg);
+    }
 
     /* B: 포신 발사 (MP3 즉시 재생 요청, 500ms 후 서보/LED/럼블) */
     if (gp->buttons & BUTTON_B) {

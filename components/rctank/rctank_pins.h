@@ -29,9 +29,8 @@ extern "C" {
 #define RCTANK_PIN_TURRET_IN1 (GPIO_NUM_22)
 #define RCTANK_PIN_TURRET_IN2 (GPIO_NUM_21)
 
-/* 포 마운트 DRV8833 */
-#define RCTANK_PIN_PORT_IN1 (GPIO_NUM_19)
-#define RCTANK_PIN_PORT_IN2 (GPIO_NUM_18)
+/* 포 마운트 서보 (SG90) */
+#define RCTANK_PIN_SERVO_ELEVATION (GPIO_NUM_13)
 
 /* 서보: 포신(당기기) */
 #define RCTANK_PIN_SERVO_RECOIL (GPIO_NUM_32)
