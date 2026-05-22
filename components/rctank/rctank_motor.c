@@ -22,6 +22,8 @@ static mcpwm_cmpr_handle_t left_cmpr_a = NULL;
 static mcpwm_cmpr_handle_t left_cmpr_b = NULL;
 static mcpwm_cmpr_handle_t right_cmpr_a = NULL;
 static mcpwm_cmpr_handle_t right_cmpr_b = NULL;
+static mcpwm_cmpr_handle_t turret_cmpr_a = NULL;
+static mcpwm_cmpr_handle_t turret_cmpr_b = NULL;
 
 static mcpwm_timer_handle_t timer0 = NULL;
 
@@ -60,6 +62,7 @@ esp_err_t rctank_motor_init(void)
 
     mcpwm_oper_handle_t left_op = NULL;
     mcpwm_oper_handle_t right_op = NULL;
+    mcpwm_oper_handle_t turret_op = NULL;
     mcpwm_operator_config_t op_config = {
         .group_id = 0,
     };
@@ -68,11 +71,15 @@ esp_err_t rctank_motor_init(void)
     ESP_RETURN_ON_ERROR(ret, TAG, "mcpwm_new_operator left");
     ret = mcpwm_new_operator(&op_config, &right_op);
     ESP_RETURN_ON_ERROR(ret, TAG, "mcpwm_new_operator right");
+    ret = mcpwm_new_operator(&op_config, &turret_op);
+    ESP_RETURN_ON_ERROR(ret, TAG, "mcpwm_new_operator turret");
 
     ret = mcpwm_operator_connect_timer(left_op, timer0);
     ESP_RETURN_ON_ERROR(ret, TAG, "connect timer left");
     ret = mcpwm_operator_connect_timer(right_op, timer0);
     ESP_RETURN_ON_ERROR(ret, TAG, "connect timer right");
+    ret = mcpwm_operator_connect_timer(turret_op, timer0);
+    ESP_RETURN_ON_ERROR(ret, TAG, "connect timer turret");
 
     mcpwm_comparator_config_t cmpr_config = {
         .flags.update_cmp_on_tez = true,
@@ -86,11 +93,15 @@ esp_err_t rctank_motor_init(void)
     ESP_RETURN_ON_ERROR(ret, TAG, "right_cmpr_a");
     ret = mcpwm_new_comparator(right_op, &cmpr_config, &right_cmpr_b);
     ESP_RETURN_ON_ERROR(ret, TAG, "right_cmpr_b");
+    ret = mcpwm_new_comparator(turret_op, &cmpr_config, &turret_cmpr_a);
+    ESP_RETURN_ON_ERROR(ret, TAG, "turret_cmpr_a");
+    ret = mcpwm_new_comparator(turret_op, &cmpr_config, &turret_cmpr_b);
+    ESP_RETURN_ON_ERROR(ret, TAG, "turret_cmpr_b");
 
     mcpwm_generator_config_t gen_config = {
         .gen_gpio_num = -1,
     };
-    mcpwm_gen_handle_t left_gen_a, left_gen_b, right_gen_a, right_gen_b;
+    mcpwm_gen_handle_t left_gen_a, left_gen_b, right_gen_a, right_gen_b, turret_gen_a, turret_gen_b;
 
     gen_config.gen_gpio_num = RCTANK_PIN_LEFT_IN1;
     ret = mcpwm_new_generator(left_op, &gen_config, &left_gen_a);
@@ -106,15 +117,12 @@ esp_err_t rctank_motor_init(void)
     ret = mcpwm_new_generator(right_op, &gen_config, &right_gen_b);
     ESP_RETURN_ON_ERROR(ret, TAG, "right_gen_b");
 
-    /* Turret & Port GPIO Init */
-    gpio_config_t io_conf = {
-        .intr_type = GPIO_INTR_DISABLE,
-        .mode = GPIO_MODE_OUTPUT,
-        .pin_bit_mask = (1ULL << RCTANK_PIN_TURRET_IN1) | (1ULL << RCTANK_PIN_TURRET_IN2),
-        .pull_down_en = 0,
-        .pull_up_en = 0,
-    };
-    gpio_config(&io_conf);
+    gen_config.gen_gpio_num = RCTANK_PIN_TURRET_IN1;
+    ret = mcpwm_new_generator(turret_op, &gen_config, &turret_gen_a);
+    ESP_RETURN_ON_ERROR(ret, TAG, "turret_gen_a");
+    gen_config.gen_gpio_num = RCTANK_PIN_TURRET_IN2;
+    ret = mcpwm_new_generator(turret_op, &gen_config, &turret_gen_b);
+    ESP_RETURN_ON_ERROR(ret, TAG, "turret_gen_b");
 
     mcpwm_generator_set_actions_on_timer_event(left_gen_a,
         MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
@@ -140,6 +148,19 @@ esp_err_t rctank_motor_init(void)
         MCPWM_GEN_TIMER_EVENT_ACTION_END());
     mcpwm_generator_set_actions_on_compare_event(right_gen_b,
         MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, right_cmpr_b, MCPWM_GEN_ACTION_LOW),
+        MCPWM_GEN_COMPARE_EVENT_ACTION_END());
+
+    mcpwm_generator_set_actions_on_timer_event(turret_gen_a,
+        MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
+        MCPWM_GEN_TIMER_EVENT_ACTION_END());
+    mcpwm_generator_set_actions_on_compare_event(turret_gen_a,
+        MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, turret_cmpr_a, MCPWM_GEN_ACTION_LOW),
+        MCPWM_GEN_COMPARE_EVENT_ACTION_END());
+    mcpwm_generator_set_actions_on_timer_event(turret_gen_b,
+        MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
+        MCPWM_GEN_TIMER_EVENT_ACTION_END());
+    mcpwm_generator_set_actions_on_compare_event(turret_gen_b,
+        MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, turret_cmpr_b, MCPWM_GEN_ACTION_LOW),
         MCPWM_GEN_COMPARE_EVENT_ACTION_END());
 
     ret = mcpwm_timer_enable(timer0);
@@ -171,14 +192,7 @@ void rctank_motor_right_track_set(int32_t speed)
 
 void rctank_motor_turret_set(int32_t speed)
 {
-    if (speed > 0) {
-        gpio_set_level(RCTANK_PIN_TURRET_IN1, 1);
-        gpio_set_level(RCTANK_PIN_TURRET_IN2, 0);
-    } else if (speed < 0) {
-        gpio_set_level(RCTANK_PIN_TURRET_IN1, 0);
-        gpio_set_level(RCTANK_PIN_TURRET_IN2, 1);
-    } else {
-        gpio_set_level(RCTANK_PIN_TURRET_IN1, 0);
-        gpio_set_level(RCTANK_PIN_TURRET_IN2, 0);
+    if (turret_cmpr_a && turret_cmpr_b) {
+        set_motor_duty(turret_cmpr_a, turret_cmpr_b, speed);
     }
 }
