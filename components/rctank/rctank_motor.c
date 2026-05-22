@@ -1,6 +1,6 @@
 /**
  * @file rctank_motor.c
- * @brief RC Tank MCPWM 트랙/터렛 제어 (DRV8833)
+ * @brief RC Tank MCPWM 트랙/터렛 제어
  */
 #include "rctank_motor.h"
 #include "rctank_pins.h"

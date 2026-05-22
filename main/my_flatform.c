@@ -30,7 +30,7 @@
 #define MG_FIRE_MS 500            /* 기관총 발사 시간 (LED 깜빡임) */
 #define MG_LED_BLINK_MS 75        /* 기관총 LED 깜빡임 주기 */
 #define MG_DELAY_MS 300           /* 기관총: MP3 재생 요청 후 LED/럼블 지연 */
-#define TURRET_SPEED 511          /* 터렛 회전 속도 (AXIS_MAX 512) */
+#define TURRET_SPEED 511          /* 터렛 회전 속도 (최대, 100% 듀티) */
 #define SELECT_START_HOLD_MS 3000
 #define RECOIL_POWER 450 /* 반동 속도 */
 
@@ -348,7 +348,7 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
         turret = TURRET_SPEED;
     rctank_motor_turret_set(turret);
 
-    /* 포 마운트: D-PAD 상하 (서보 SG90, GPIO 13, 범위 0~60도) */
+    /* 포 마운트: D-PAD 상하 (서보 SG90, GPIO 13, 범위 80~110도, 초기 90도) */
     static float s_elevation_deg = RCTANK_SERVO_ELEVATION_DEG_REST;
     static int64_t s_last_elevation_time_ms = 0;
 

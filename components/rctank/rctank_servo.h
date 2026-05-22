@@ -34,8 +34,8 @@ void rctank_servo_gun_set_degree(int degree);
 void rctank_servo_gun_enable(int enable);
 
 /**
- * @brief 포 마운트 서보 각도 설정 (D-PAD 상하용, 0~60도)
- * @param degree 0~60
+ * @brief 포 마운트 서보 각도 설정 (D-PAD 상하용, 80~110도)
+ * @param degree 80~110
  */
 void rctank_servo_elevation_set_degree(int degree);
 

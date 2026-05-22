@@ -1,6 +1,6 @@
 /**
  * @file rctank_motor.h
- * @brief RC Tank 트랙/터렛 MCPWM 제어 (DRV8833, C 함수)
+ * @brief RC Tank 트랙/터렛 MCPWM 제어
  */
 #ifndef RCTANK_MOTOR_H
 #define RCTANK_MOTOR_H
