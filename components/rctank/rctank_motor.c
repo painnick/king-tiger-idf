@@ -110,8 +110,7 @@ esp_err_t rctank_motor_init(void)
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_OUTPUT,
-        .pin_bit_mask = (1ULL << RCTANK_PIN_TURRET_IN1) | (1ULL << RCTANK_PIN_TURRET_IN2) |
-                        (1ULL << RCTANK_PIN_PORT_IN1) | (1ULL << RCTANK_PIN_PORT_IN2),
+        .pin_bit_mask = (1ULL << RCTANK_PIN_TURRET_IN1) | (1ULL << RCTANK_PIN_TURRET_IN2),
         .pull_down_en = 0,
         .pull_up_en = 0,
     };
@@ -151,7 +150,6 @@ esp_err_t rctank_motor_init(void)
     rctank_motor_left_track_set(0);
     rctank_motor_right_track_set(0);
     rctank_motor_turret_set(0);
-    rctank_motor_port_set(0);
 
     ESP_LOGI(TAG, "motor init ok");
     return ESP_OK;
@@ -182,19 +180,5 @@ void rctank_motor_turret_set(int32_t speed)
     } else {
         gpio_set_level(RCTANK_PIN_TURRET_IN1, 0);
         gpio_set_level(RCTANK_PIN_TURRET_IN2, 0);
-    }
-}
-
-void rctank_motor_port_set(int32_t speed)
-{
-    if (speed > 0) {
-        gpio_set_level(RCTANK_PIN_PORT_IN1, 1);
-        gpio_set_level(RCTANK_PIN_PORT_IN2, 0);
-    } else if (speed < 0) {
-        gpio_set_level(RCTANK_PIN_PORT_IN1, 0);
-        gpio_set_level(RCTANK_PIN_PORT_IN2, 1);
-    } else {
-        gpio_set_level(RCTANK_PIN_PORT_IN1, 0);
-        gpio_set_level(RCTANK_PIN_PORT_IN2, 0);
     }
 }

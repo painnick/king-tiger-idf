@@ -35,12 +35,6 @@ void rctank_motor_right_track_set(int32_t speed);
  */
 void rctank_motor_turret_set(int32_t speed);
 
-/**
- * @brief 포 마운트(상하) 속도 설정
- * @param speed -512 ~ 511 (음수: 하, 양수: 상)
- */
-void rctank_motor_port_set(int32_t speed);
-
 #ifdef __cplusplus
 }
 #endif
