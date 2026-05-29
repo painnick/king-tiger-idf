@@ -24,10 +24,22 @@ esp_err_t rctank_motor_init(void);
 void rctank_motor_left_track_set(int32_t speed);
 
 /**
+ * @brief 좌측 트랙 속도 즉시 설정 (가속/감속 램프 우회)
+ * @param speed -512 ~ 511
+ */
+void rctank_motor_left_track_set_immediate(int32_t speed);
+
+/**
  * @brief 우측 트랙 속도 설정
  * @param speed -512 ~ 511
  */
 void rctank_motor_right_track_set(int32_t speed);
+
+/**
+ * @brief 우측 트랙 속도 즉시 설정 (가속/감속 램프 우회)
+ * @param speed -512 ~ 511
+ */
+void rctank_motor_right_track_set_immediate(int32_t speed);
 
 /**
  * @brief 터렛 회전 속도 설정

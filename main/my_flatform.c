@@ -87,8 +87,8 @@ static void gun_return_timer_cb(void* arg) {
 static void gun_fire_timer_cb(void* arg) {
     (void)arg;
     /* 2단계 종료: 트랙 정지 */
-    rctank_motor_left_track_set(0);
-    rctank_motor_right_track_set(0);
+    rctank_motor_left_track_set_immediate(0);
+    rctank_motor_right_track_set_immediate(0);
 
     /* 3단계 시작: 포신 복구 지연 */
     esp_timer_start_once(gun_return_timer, GUN_RETURN_WAIT_MS * 1000);
@@ -97,8 +97,8 @@ static void gun_fire_timer_cb(void* arg) {
 static void gun_track_timer_cb(void* arg) {
     (void)arg;
     /* 2단계 시작: 트랙 밀기 */
-    rctank_motor_left_track_set(-RECOIL_POWER);
-    rctank_motor_right_track_set(-RECOIL_POWER);
+    rctank_motor_left_track_set_immediate(-RECOIL_POWER);
+    rctank_motor_right_track_set_immediate(-RECOIL_POWER);
 
     /* 트랙 정지 예약 */
     esp_timer_start_once(gun_timer, GUN_TRACK_MS * 1000);
@@ -286,8 +286,8 @@ static void my_platform_on_device_connected(uni_hid_device_t* d) {
 
 static void my_platform_on_device_disconnected(uni_hid_device_t* d) {
     logi("custom: device disconnected: %p\n", d);
-    rctank_motor_left_track_set(0);
-    rctank_motor_right_track_set(0);
+    rctank_motor_left_track_set_immediate(0);
+    rctank_motor_right_track_set_immediate(0);
     rctank_motor_turret_set(0);
     /* 연결 해제 시 다시 30초 주기 재생 시작 */
     rctank_dfplayer_play(RCTANK_DFPLAYER_TRACK_IDLE);

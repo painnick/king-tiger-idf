@@ -9,6 +9,10 @@
 #include "esp_log.h"
 #include "esp_check.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+
 static const char *TAG = "rctank_motor";
 
 #define MCPWM_FREQ_HZ          (20000)
@@ -18,6 +22,9 @@ static const char *TAG = "rctank_motor";
 /* 스틱 범위 ±512 → 듀티 비율 (0~100%) */
 #define AXIS_MAX              512
 
+#define TRACK_DECEL_STEP 8  // 10ms 당 감속 단계 (약 640ms 내에 정지)
+#define TRACK_ACCEL_STEP 30  // 10ms 당 가속 단계 (약 170ms 내에 최대 속도 도달)
+
 static mcpwm_cmpr_handle_t left_cmpr_a = NULL;
 static mcpwm_cmpr_handle_t left_cmpr_b = NULL;
 static mcpwm_cmpr_handle_t right_cmpr_a = NULL;
@@ -26,6 +33,82 @@ static mcpwm_cmpr_handle_t turret_cmpr_a = NULL;
 static mcpwm_cmpr_handle_t turret_cmpr_b = NULL;
 
 static mcpwm_timer_handle_t timer0 = NULL;
+
+static volatile int32_t target_left_speed = 0;
+static volatile int32_t target_right_speed = 0;
+static int32_t current_left_speed = 0;
+static int32_t current_right_speed = 0;
+
+static SemaphoreHandle_t motor_mutex = NULL;
+static TaskHandle_t motor_task_handle = NULL;
+
+static void set_motor_duty(mcpwm_cmpr_handle_t cmpr_a, mcpwm_cmpr_handle_t cmpr_b, int32_t speed);
+
+static void update_motor_speed(int32_t *current, int32_t target)
+{
+    int32_t cur = *current;
+    if (cur == target) {
+        return;
+    }
+
+    int32_t diff = target - cur;
+    int32_t step;
+
+    // Determine if we are accelerating or decelerating
+    bool is_decelerating = false;
+    
+    if (cur > 0) {
+        if (target < cur) {
+            is_decelerating = true;
+        }
+    } else if (cur < 0) {
+        if (target > cur) {
+            is_decelerating = true;
+        }
+    } else {
+        is_decelerating = false;
+    }
+
+    if (is_decelerating) {
+        step = TRACK_DECEL_STEP;
+    } else {
+        step = TRACK_ACCEL_STEP;
+    }
+
+    if (diff > 0) {
+        if (diff > step) {
+            *current = cur + step;
+        } else {
+            *current = target;
+        }
+    } else {
+        if (-diff > step) {
+            *current = cur - step;
+        } else {
+            *current = target;
+        }
+    }
+}
+
+static void rctank_motor_update_task(void *pvParameters)
+{
+    TickType_t last_wake_time = xTaskGetTickCount();
+    while (1) {
+        if (motor_mutex && xSemaphoreTake(motor_mutex, portMAX_DELAY) == pdTRUE) {
+            update_motor_speed(&current_left_speed, target_left_speed);
+            if (left_cmpr_a && left_cmpr_b) {
+                set_motor_duty(left_cmpr_a, left_cmpr_b, current_left_speed);
+            }
+
+            update_motor_speed(&current_right_speed, target_right_speed);
+            if (right_cmpr_a && right_cmpr_b) {
+                set_motor_duty(right_cmpr_a, right_cmpr_b, current_right_speed);
+            }
+            xSemaphoreGive(motor_mutex);
+        }
+        vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(10));
+    }
+}
 
 static void set_motor_duty(mcpwm_cmpr_handle_t cmpr_a, mcpwm_cmpr_handle_t cmpr_b, int32_t speed)
 {
@@ -49,6 +132,17 @@ static void set_motor_duty(mcpwm_cmpr_handle_t cmpr_a, mcpwm_cmpr_handle_t cmpr_
 esp_err_t rctank_motor_init(void)
 {
     esp_err_t ret;
+
+    target_left_speed = 0;
+    target_right_speed = 0;
+    current_left_speed = 0;
+    current_right_speed = 0;
+
+    motor_mutex = xSemaphoreCreateMutex();
+    if (!motor_mutex) {
+        ESP_LOGE(TAG, "Failed to create motor mutex");
+        return ESP_FAIL;
+    }
 
     mcpwm_timer_config_t timer_config = {
         .group_id = 0,
@@ -168,9 +262,23 @@ esp_err_t rctank_motor_init(void)
     ret = mcpwm_timer_start_stop(timer0, MCPWM_TIMER_START_NO_STOP);
     ESP_RETURN_ON_ERROR(ret, TAG, "timer0_start");
 
-    rctank_motor_left_track_set(0);
-    rctank_motor_right_track_set(0);
+    rctank_motor_left_track_set_immediate(0);
+    rctank_motor_right_track_set_immediate(0);
     rctank_motor_turret_set(0);
+
+    BaseType_t task_ret = xTaskCreatePinnedToCore(
+        rctank_motor_update_task,
+        "rctank_motor_update",
+        2048,
+        NULL,
+        5,
+        &motor_task_handle,
+        1
+    );
+    if (task_ret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create motor task");
+        return ESP_FAIL;
+    }
 
     ESP_LOGI(TAG, "motor init ok");
     return ESP_OK;
@@ -178,15 +286,41 @@ esp_err_t rctank_motor_init(void)
 
 void rctank_motor_left_track_set(int32_t speed)
 {
-    if (left_cmpr_a && left_cmpr_b) {
-        set_motor_duty(left_cmpr_a, left_cmpr_b, speed);
+    if (motor_mutex && xSemaphoreTake(motor_mutex, portMAX_DELAY) == pdTRUE) {
+        target_left_speed = speed;
+        xSemaphoreGive(motor_mutex);
+    }
+}
+
+void rctank_motor_left_track_set_immediate(int32_t speed)
+{
+    if (motor_mutex && xSemaphoreTake(motor_mutex, portMAX_DELAY) == pdTRUE) {
+        target_left_speed = speed;
+        current_left_speed = speed;
+        if (left_cmpr_a && left_cmpr_b) {
+            set_motor_duty(left_cmpr_a, left_cmpr_b, speed);
+        }
+        xSemaphoreGive(motor_mutex);
     }
 }
 
 void rctank_motor_right_track_set(int32_t speed)
 {
-    if (right_cmpr_a && right_cmpr_b) {
-        set_motor_duty(right_cmpr_a, right_cmpr_b, speed);
+    if (motor_mutex && xSemaphoreTake(motor_mutex, portMAX_DELAY) == pdTRUE) {
+        target_right_speed = speed;
+        xSemaphoreGive(motor_mutex);
+    }
+}
+
+void rctank_motor_right_track_set_immediate(int32_t speed)
+{
+    if (motor_mutex && xSemaphoreTake(motor_mutex, portMAX_DELAY) == pdTRUE) {
+        target_right_speed = speed;
+        current_right_speed = speed;
+        if (right_cmpr_a && right_cmpr_b) {
+            set_motor_duty(right_cmpr_a, right_cmpr_b, speed);
+        }
+        xSemaphoreGive(motor_mutex);
     }
 }
 
