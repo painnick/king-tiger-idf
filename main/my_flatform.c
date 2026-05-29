@@ -334,6 +334,12 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
     if (ry > -AXIS_DEADZONE && ry < AXIS_DEADZONE)
         ry = 0;
 
+    static int64_t last_log_time = 0;
+    if (now_ms - last_log_time >= 500) {
+        last_log_time = now_ms;
+        logi("Raw Y: %d, RY: %d | Clamped ly: %d, ry: %d\n", gp->axis_y, gp->axis_ry, ly, ry);
+    }
+
     /* 리코일 중이 아닐 때만 스틱 값으로 트랙 제어 */
     if (now_ms >= recoil_end_time) {
         rctank_motor_left_track_set(-ly);

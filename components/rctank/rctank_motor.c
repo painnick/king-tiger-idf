@@ -22,8 +22,11 @@ static const char *TAG = "rctank_motor";
 /* 스틱 범위 ±512 → 듀티 비율 (0~100%) */
 #define AXIS_MAX              512
 
-#define TRACK_DECEL_STEP 8  // 10ms 당 감속 단계 (약 640ms 내에 정지)
-#define TRACK_ACCEL_STEP 30  // 10ms 당 가속 단계 (약 170ms 내에 최대 속도 도달)
+#define TRACK_DECEL_STEP 10  // 10ms 당 감속 단계 (실질 범위 448~512에서 약 640ms 내에 정지, 10배 스케일)
+#define TRACK_ACCEL_STEP 6   // 10ms 당 가속 단계 (실질 범위 448~512에서 약 1000ms 내에 최대 속도 도달, 10배 스케일)
+#define TRACK_MIN_SPEED  448 // 모터 구동을 개시하는 최소 기동 속도 오프셋 (0~512 범위 내)
+#define TRACK_STICK_THRESHOLD 460  // 90% 스틱 경계값 (512 * 0.90)
+#define TRACK_EXPO_THRESHOLD  178  // 90% 경계값에서의 모터 중간 속도 목표치 (최대 속도의 약 91%가 되도록 조정)
 
 static mcpwm_cmpr_handle_t left_cmpr_a = NULL;
 static mcpwm_cmpr_handle_t left_cmpr_b = NULL;
@@ -49,6 +52,21 @@ static void update_motor_speed(int32_t *current, int32_t target)
     int32_t cur = *current;
     if (cur == target) {
         return;
+    }
+
+    // 1. 0에서 기동할 때 최소 구동 속도(TRACK_MIN_SPEED * 10)로 즉시 점프
+    if (cur == 0 && target != 0) {
+        int32_t sign = (target > 0) ? 1 : -1;
+        int32_t start_speed = sign * TRACK_MIN_SPEED * 10;
+        
+        int32_t target_abs = (target > 0) ? target : -target;
+        // target 절대값이 최소 기동 속도 이하이면 즉시 target으로 설정 후 리턴
+        if (target_abs <= TRACK_MIN_SPEED * 10) {
+            *current = target;
+            return;
+        }
+        cur = start_speed;
+        *current = cur;
     }
 
     int32_t diff = target - cur;
@@ -88,6 +106,14 @@ static void update_motor_speed(int32_t *current, int32_t target)
             *current = target;
         }
     }
+
+    // 2. 감속 정지 시 최소 구동 속도 이하로 떨어지면 웅웅거림 방지를 위해 즉시 0으로 정지
+    if (target == 0) {
+        int32_t cur_abs = (*current > 0) ? *current : -*current;
+        if (cur_abs < TRACK_MIN_SPEED * 10) {
+            *current = 0;
+        }
+    }
 }
 
 static void rctank_motor_update_task(void *pvParameters)
@@ -95,14 +121,14 @@ static void rctank_motor_update_task(void *pvParameters)
     TickType_t last_wake_time = xTaskGetTickCount();
     while (1) {
         if (motor_mutex && xSemaphoreTake(motor_mutex, portMAX_DELAY) == pdTRUE) {
-            update_motor_speed(&current_left_speed, target_left_speed);
+            update_motor_speed(&current_left_speed, target_left_speed * 10);
             if (left_cmpr_a && left_cmpr_b) {
-                set_motor_duty(left_cmpr_a, left_cmpr_b, current_left_speed);
+                set_motor_duty(left_cmpr_a, left_cmpr_b, current_left_speed / 10);
             }
 
-            update_motor_speed(&current_right_speed, target_right_speed);
+            update_motor_speed(&current_right_speed, target_right_speed * 10);
             if (right_cmpr_a && right_cmpr_b) {
-                set_motor_duty(right_cmpr_a, right_cmpr_b, current_right_speed);
+                set_motor_duty(right_cmpr_a, right_cmpr_b, current_right_speed / 10);
             }
             xSemaphoreGive(motor_mutex);
         }
@@ -284,10 +310,32 @@ esp_err_t rctank_motor_init(void)
     return ESP_OK;
 }
 
+static int32_t map_joystick_to_motor_speed(int32_t speed)
+{
+    if (speed == 0) return 0;
+    
+    int32_t sign = (speed > 0) ? 1 : -1;
+    int32_t abs_speed = (speed > 0) ? speed : -speed;
+    int32_t expo_speed;
+    
+    // 75% 스틱 경계를 기준으로 분할 선형 매핑 적용 (75% 이전은 느리게, 이후는 빠르게)
+    if (abs_speed <= TRACK_STICK_THRESHOLD) {
+        expo_speed = (abs_speed * TRACK_EXPO_THRESHOLD) / TRACK_STICK_THRESHOLD;
+    } else {
+        expo_speed = TRACK_EXPO_THRESHOLD + ((abs_speed - TRACK_STICK_THRESHOLD) * (AXIS_MAX - TRACK_EXPO_THRESHOLD)) / (AXIS_MAX - TRACK_STICK_THRESHOLD);
+    }
+    
+    // 2. Add minimum start-up speed offset
+    int32_t mapped = TRACK_MIN_SPEED + (expo_speed * (AXIS_MAX - TRACK_MIN_SPEED)) / AXIS_MAX;
+    
+    return sign * mapped;
+}
+
 void rctank_motor_left_track_set(int32_t speed)
 {
+    int32_t mapped_speed = map_joystick_to_motor_speed(speed);
     if (motor_mutex && xSemaphoreTake(motor_mutex, portMAX_DELAY) == pdTRUE) {
-        target_left_speed = speed;
+        target_left_speed = mapped_speed;
         xSemaphoreGive(motor_mutex);
     }
 }
@@ -296,7 +344,7 @@ void rctank_motor_left_track_set_immediate(int32_t speed)
 {
     if (motor_mutex && xSemaphoreTake(motor_mutex, portMAX_DELAY) == pdTRUE) {
         target_left_speed = speed;
-        current_left_speed = speed;
+        current_left_speed = speed * 10;
         if (left_cmpr_a && left_cmpr_b) {
             set_motor_duty(left_cmpr_a, left_cmpr_b, speed);
         }
@@ -306,8 +354,9 @@ void rctank_motor_left_track_set_immediate(int32_t speed)
 
 void rctank_motor_right_track_set(int32_t speed)
 {
+    int32_t mapped_speed = map_joystick_to_motor_speed(speed);
     if (motor_mutex && xSemaphoreTake(motor_mutex, portMAX_DELAY) == pdTRUE) {
-        target_right_speed = speed;
+        target_right_speed = mapped_speed;
         xSemaphoreGive(motor_mutex);
     }
 }
@@ -316,7 +365,7 @@ void rctank_motor_right_track_set_immediate(int32_t speed)
 {
     if (motor_mutex && xSemaphoreTake(motor_mutex, portMAX_DELAY) == pdTRUE) {
         target_right_speed = speed;
-        current_right_speed = speed;
+        current_right_speed = speed * 10;
         if (right_cmpr_a && right_cmpr_b) {
             set_motor_duty(right_cmpr_a, right_cmpr_b, speed);
         }
