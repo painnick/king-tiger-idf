@@ -303,7 +303,7 @@ static void avdtp_handle_start_sdp_client_query(void * context){
     if (connection != NULL){
 
         // Get UUID to Query
-        uint16_t uuid;
+        uint16_t uuid = 0;
         switch (connection->state){
             case AVDTP_SIGNALING_W2_SEND_SDP_QUERY_FOR_REMOTE_SOURCE:
                 uuid = BLUETOOTH_SERVICE_CLASS_AUDIO_SOURCE;
